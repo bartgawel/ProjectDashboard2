@@ -50,7 +50,7 @@ th{background:#f8f9fb;position:sticky;top:0}
       <button id="refreshBtn">Refresh</button>
     </div>
 
-    <div id="statusBox" class="statusbox">Starting...</div><div class="muted" style="margin:0 0 10px 2px">Partner split: <b>NTNU&SINTEF = Procurement of R&amp;D services</b>; <b>TQC = all other budget categories</b>. Hover either bar to see TQC, UiO and Total.</div>
+    <div id="statusBox" class="statusbox">Starting...</div><div class="muted" style="margin:0 0 10px 2px">Partner split: <b>SINTEF and NTNU = Procurement of R&amp;D services</b>; <b>TQC = all other budget categories</b>. Hover either bar to see TQC, SINTEF and NTNU and Total.</div>
 
     <div class="cards">
       <div class="card"><div class="label">Total budget</div><div class="value" id="kBudget">—</div></div>
@@ -77,12 +77,12 @@ th{background:#f8f9fb;position:sticky;top:0}
     </div>
 
     <div class="grid2">
-      <div class="panel"><h2>Budget by work package — TQC vs NTNU&SINTEF</h2><div id="budgetWP" class="chart"></div></div>
+      <div class="panel"><h2>Budget by work package — TQC vs SINTEF and NTNU</h2><div id="budgetWP" class="chart"></div></div>
       <div class="panel"><h2>Budget by category</h2><div id="budgetCat" class="chart"></div></div>
     </div>
 
     <div class="grid2">
-      <div class="panel"><h2>Annual budget — TQC vs NTNU&SINTEF</h2><div id="budgetYear" class="chart"></div></div>
+      <div class="panel"><h2>Annual budget — TQC vs SINTEF and NTNU</h2><div id="budgetYear" class="chart"></div></div>
       <div class="panel"><h2>WP progress</h2><div id="progressWP" class="chart"></div></div>
     </div>
 
@@ -336,7 +336,7 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
     row.Total=excelTotal!==0?excelTotal:calc;
 
     // Partner split:
-    // NTNU&SINTEF = Procurement of R&D services
+    // SINTEF and NTNU = Procurement of R&D services
     // TQC = all remaining budget categories
     row.UiO = row["Procurement of R&D services"] || 0;
     row.TQC = Math.max(0, row.Total - row.UiO);
@@ -585,7 +585,7 @@ function renderBudget(){
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "UiO: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     },
     {
@@ -597,7 +597,7 @@ function renderBudget(){
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "UiO: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     }
   ],{
@@ -632,7 +632,7 @@ function renderBudget(){
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "UiO: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     },
     {
@@ -644,7 +644,7 @@ function renderBudget(){
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "UiO: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     }
   ],{
