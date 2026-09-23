@@ -590,14 +590,14 @@ function renderBudget(){
     },
     {
       type:"bar",
-      name:"UiO",
+      name:"NTNU and SINTEF",
       x:wpNames,
       y:wpUiO,
       customdata:wpNames.map((w,i)=>[wpTQC[i],wpUiO[i],wpTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "UiO: %{customdata[1]:,.0f}<br>" +
+        "NTNU and SINTEF: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     }
   ],{
@@ -632,7 +632,7 @@ function renderBudget(){
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "UiO: %{customdata[1]:,.0f}<br>" +
+        "NTNU and SITEF: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     },
     {
