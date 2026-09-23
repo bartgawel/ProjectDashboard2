@@ -50,7 +50,7 @@ th{background:#f8f9fb;position:sticky;top:0}
       <button id="refreshBtn">Refresh</button>
     </div>
 
-    <div id="statusBox" class="statusbox">Starting...</div><div class="muted" style="margin:0 0 10px 2px">Partner split: <b>NTNU&SINTEF = Procurement of R&amp;D services</b>; <b>TQC = all other budget categories</b>. Hover either bar to see TQC, NTNU&SINTEF and Total.</div>
+    <div id="statusBox" class="statusbox">Starting...</div><div class="muted" style="margin:0 0 10px 2px">Partner split: <b>NTNU&SINTEF = Procurement of R&amp;D services</b>; <b>TQC = all other budget categories</b>. Hover either bar to see TQC, UiO and Total.</div>
 
     <div class="cards">
       <div class="card"><div class="label">Total budget</div><div class="value" id="kBudget">—</div></div>
@@ -338,8 +338,8 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
     // Partner split:
     // NTNU&SINTEF = Procurement of R&D services
     // TQC = all remaining budget categories
-    row.NTNU&SINTEF = row["Procurement of R&D services"] || 0;
-    row.TQC = Math.max(0, row.Total - row.NTNU&SINTEF);
+    row.UiO = row["Procurement of R&D services"] || 0;
+    row.TQC = Math.max(0, row.Total - row.UiO);
 
     row.ActualCost=num(first(r,["ActualCost","Actual Cost","Actual"],0));
     return row;
@@ -356,27 +356,27 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
   const partnerByWP={};
   const partnerByYear={};
   let partnerTotalTQC=0;
-  let partnerTotalNTNU&SINTEF=0;
+  let partnerTotalUiO=0;
 
   budgetRows.forEach(r=>{
     const wp=r.WP||"Unassigned";
     budgetByWP[wp]=(budgetByWP[wp]||0)+r.Total;
 
-    if(!partnerByWP[wp]) partnerByWP[wp]={TQC:0,NTNU&SINTEF:0,Total:0};
+    if(!partnerByWP[wp]) partnerByWP[wp]={TQC:0,UiO:0,Total:0};
     partnerByWP[wp].TQC += r.TQC || 0;
-    partnerByWP[wp].NTNU&SINTEF += r.NTNU&SINTEF || 0;
+    partnerByWP[wp].UiO += r.UiO || 0;
     partnerByWP[wp].Total += r.Total || 0;
 
     if(r.Year){
       budgetByYear[r.Year]=(budgetByYear[r.Year]||0)+r.Total;
-      if(!partnerByYear[r.Year]) partnerByYear[r.Year]={TQC:0,NTNU&SINTEF:0,Total:0};
+      if(!partnerByYear[r.Year]) partnerByYear[r.Year]={TQC:0,UiO:0,Total:0};
       partnerByYear[r.Year].TQC += r.TQC || 0;
-      partnerByYear[r.Year].NTNU&SINTEF += r.NTNU&SINTEF || 0;
+      partnerByYear[r.Year].UiO += r.UiO || 0;
       partnerByYear[r.Year].Total += r.Total || 0;
     }
 
     partnerTotalTQC += r.TQC || 0;
-    partnerTotalNTNU&SINTEF += r.NTNU&SINTEF || 0;
+    partnerTotalUiO += r.UiO || 0;
 
     categories.forEach(c=>budgetByCategory[c]+=r[c]);
   });
@@ -411,7 +411,7 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
     },
     items,wps,tasks,milestones,budgetRows,categories,budgetByWP,budgetByYear,budgetByCategory,
     partnerByWP,partnerByYear,
-    partnerTotals:{TQC:partnerTotalTQC,NTNU&SINTEF:partnerTotalNTNU&SINTEF,Total:partnerTotalTQC+partnerTotalNTNU&SINTEF},
+    partnerTotals:{TQC:partnerTotalTQC,UiO:partnerTotalUiO,Total:partnerTotalTQC+partnerTotalUiO},
     kpis:{
       totalBudget,
       totalActual,
@@ -572,7 +572,7 @@ function renderBudget(){
   const wpNames=Object.keys(MODEL.budgetByWP);
 
   const wpTQC=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].TQC:0);
-  const wpNTNU&SINTEF=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].NTNU&SINTEF:0);
+  const wpUiO=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].UiO:0);
   const wpTotal=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].Total:0);
 
   Plotly.newPlot("budgetWP",[
@@ -581,7 +581,7 @@ function renderBudget(){
       name:"TQC",
       x:wpNames,
       y:wpTQC,
-      customdata:wpNames.map((w,i)=>[wpTQC[i],wpNTNU&SINTEF[i],wpTotal[i]]),
+      customdata:wpNames.map((w,i)=>[wpTQC[i],wpUiO[i],wpTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
@@ -590,10 +590,10 @@ function renderBudget(){
     },
     {
       type:"bar",
-      name:"NTNU&SINTEF",
+      name:"UiO",
       x:wpNames,
-      y:wpNTNU&SINTEF,
-      customdata:wpNames.map((w,i)=>[wpTQC[i],wpNTNU&SINTEF[i],wpTotal[i]]),
+      y:wpUiO,
+      customdata:wpNames.map((w,i)=>[wpTQC[i],wpUiO[i],wpTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
@@ -619,7 +619,7 @@ function renderBudget(){
 
   const years=Object.keys(MODEL.budgetByYear).sort();
   const yearTQC=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].TQC:0);
-  const yearNTNU&SINTEF=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].NTNU&SINTEF:0);
+  const yearUiO=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].UiO:0);
   const yearTotal=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].Total:0);
 
   Plotly.newPlot("budgetYear",[
@@ -628,7 +628,7 @@ function renderBudget(){
       name:"TQC",
       x:years,
       y:yearTQC,
-      customdata:years.map((y,i)=>[yearTQC[i],yearNTNU&SINTEF[i],yearTotal[i]]),
+      customdata:years.map((y,i)=>[yearTQC[i],yearUiO[i],yearTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
@@ -637,10 +637,10 @@ function renderBudget(){
     },
     {
       type:"bar",
-      name:"NTNU&SINTEF",
+      name:"UiO",
       x:years,
-      y:yearNTNU&SINTEF,
-      customdata:years.map((y,i)=>[yearTQC[i],yearNTNU&SINTEF[i],yearTotal[i]]),
+      y:yearUiO,
+      customdata:years.map((y,i)=>[yearTQC[i],yearUiO[i],yearTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
