@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project Dashboard</title>
+
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+  <style>
+*{box-sizing:border-box}
+body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f5f7fa;color:#202124}
+#app{padding:16px}
+.header{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:10px}
+h1{font-size:26px;margin:0}
+h2{font-size:16px;margin:0 0 10px 0}
+.muted{font-size:12px;color:#68707a;margin-top:3px}
+button{border:0;border-radius:6px;padding:8px 12px;background:#0f6cbd;color:#fff;font-weight:600;cursor:pointer}
+button:hover{background:#115ea3}
+.statusbox{font-size:12px;padding:8px 10px;border-radius:6px;background:#eef3f8;margin:8px 0 12px}
+.statusbox.error{background:#fde7e9;color:#a4262c}
+.cards{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:10px}
+.card,.panel{background:#fff;border:1px solid #e1e5ea;border-radius:8px}
+.card{padding:11px}
+.label{font-size:10px;text-transform:uppercase;color:#69727d;font-weight:700}
+.value{font-size:21px;font-weight:700;margin-top:4px}
+.panel{padding:12px;margin-bottom:10px}
+.panelhead{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.filters{display:flex;gap:8px;font-size:11px;color:#69727d}
+select{font-size:11px;padding:4px;border:1px solid #c8cdd3;border-radius:4px;background:#fff}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chart{height:340px}
+.chart.tall{height:520px}
+table{border-collapse:collapse;width:100%;font-size:11px}
+th,td{padding:6px;border-bottom:1px solid #eceff2;text-align:left}
+th{background:#f8f9fb;position:sticky;top:0}
+.pill{padding:2px 6px;border-radius:10px;background:#eef1f4}
+@media(max-width:900px){.cards{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}}
+
+</style>
+</head>
+<body>
+  <div id="app">
+    <div class="header">
+      <div>
+        <h1 id="projectTitle">Project Dashboard</h1>
+        <div id="projectMeta" class="muted">Loading workbook...</div>
+      </div>
+      <button id="refreshBtn">Refresh</button>
+    </div>
+
+    <div id="statusBox" class="statusbox">Starting...</div><div class="muted" style="margin:0 0 10px 2px">Partner split: <b>NTNU&SINTEF = Procurement of R&amp;D services</b>; <b>TQC = all other budget categories</b>. Hover either bar to see TQC, NTNU&SINTEF and Total.</div>
+
+    <div class="cards">
+      <div class="card"><div class="label">Total budget</div><div class="value" id="kBudget">—</div></div>
+      <div class="card"><div class="label">Actual cost</div><div class="value" id="kActual">—</div></div>
+      <div class="card"><div class="label">Remaining</div><div class="value" id="kRemaining">—</div></div>
+      <div class="card"><div class="label">Project progress</div><div class="value" id="kProgress">—</div></div>
+      <div class="card"><div class="label">Milestones</div><div class="value" id="kMilestones">—</div></div>
+      <div class="card"><div class="label">Delayed MS</div><div class="value" id="kDelayed">—</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="panelhead">
+        <h2>Project Gantt</h2>
+        <div class="filters">
+          <label>WP
+            <select id="wpFilter"><option value="ALL">All</option></select>
+          </label>
+          <label>Status
+            <select id="statusFilter"><option value="ALL">All</option></select>
+          </label>
+        </div>
+      </div>
+      <div id="gantt" class="chart tall"></div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel"><h2>Budget by work package — TQC vs NTNU&SINTEF</h2><div id="budgetWP" class="chart"></div></div>
+      <div class="panel"><h2>Budget by category</h2><div id="budgetCat" class="chart"></div></div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel"><h2>Annual budget — TQC vs NTNU&SINTEF</h2><div id="budgetYear" class="chart"></div></div>
+      <div class="panel"><h2>WP progress</h2><div id="progressWP" class="chart"></div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Milestone register</h2>
+      <div id="milestoneTable"></div>
+    </div>
+  </div>
+
+  <script>
+let MODEL = null;
+
+function wireDashboardControls(){
+  const refresh = document.getElementById("refreshBtn");
+  const wp = document.getElementById("wpFilter");
+  const status = document.getElementById("statusFilter");
+
+  if(refresh) refresh.addEventListener("click", loadDashboard);
+  if(wp) wp.addEventListener("change", renderGantt);
+  if(status) status.addEventListener("change", renderGantt);
+}
+
+function startDashboard(){
+  wireDashboardControls();
+
+  if(typeof Office === "undefined"){
+    setStatus(
+      "Dashboard preview only. Open this page through the Excel add-in to load workbook data."
+    );
+    return;
+  }
+
+  Office.onReady(() => {
+    loadDashboard();
+  });
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", startDashboard);
+}else{
+  startDashboard();
+}
+
+async function loadDashboard(){
+  setStatus("Reading workbook...");
+  try{
+    MODEL = await Excel.run(async (context) => {
+      const wb = context.workbook;
+
+      const sSettings = wb.worksheets.getItem("Project_Settings");
+      const sPlan = wb.worksheets.getItem("Project_Plan");
+      const sBudget = wb.worksheets.getItem("Budget");
+
+      const rSettings = sSettings.getUsedRange();
+      const rPlan = sPlan.getUsedRange();
+      const rBudget = sBudget.getUsedRange();
+
+      rSettings.load("values");
+      rPlan.load("values");
+      rBudget.load("values");
+
+      await context.sync();
+
+      return buildModel(rSettings.values, rPlan.values, rBudget.values);
+    });
+
+    renderAll();
+    setStatus(
+      `Loaded ${MODEL.wps.length} WPs, ${MODEL.milestones.length} milestones, ` +
+      `${MODEL.budgetRows.length} budget rows.`
+    );
+  }catch(err){
+    console.error(err);
+    setStatus(err && err.message ? err.message : String(err), true);
+  }
+}
+
+function setStatus(text,isError=false){
+  const el=document.getElementById("statusBox");
+  el.textContent=text;
+  el.className=isError?"statusbox error":"statusbox";
+}
+
+function clean(v){ return v==null?"":String(v).trim(); }
+
+function num(v){
+  if(v==null || v==="") return 0;
+  if(typeof v==="number") return Number.isFinite(v)?v:0;
+
+  let s=String(v).trim();
+  if(!s) return 0;
+
+  s=s.replace(/\u00A0/g," ").replace(/\s+/g,"");
+  s=s.replace(/NOK|EUR|USD|SEK|DKK|PLN/gi,"");
+  s=s.replace(/%/g,"");
+
+  const c=s.lastIndexOf(",");
+  const d=s.lastIndexOf(".");
+
+  if(c>=0 && d>=0){
+    if(c>d) s=s.replace(/\./g,"").replace(",",".");
+    else s=s.replace(/,/g,"");
+  }else if(c>=0){
+    const n=s.length-c-1;
+    if(n===3) s=s.replace(/,/g,"");
+    else s=s.replace(",",".");
+  }else if(d>=0){
+    const n=s.length-d-1;
+    if(n===3) s=s.replace(/\./g,"");
+  }
+
+  s=s.replace(/[^0-9eE+\-.]/g,"");
+  const x=Number(s);
+  return Number.isFinite(x)?x:0;
+}
+
+function pct(v){
+  if(v==null || v==="") return 0;
+  const raw=String(v).trim();
+  const x=num(v);
+  if(raw.includes("%")) return x;
+  return x>=0 && x<=1 ? x*100 : x;
+}
+
+function excelDate(v){
+  if(v==null || v==="") return null;
+
+  if(typeof v==="number" && v>20000){
+    const ms=Math.round((v-25569)*86400*1000);
+    return new Date(ms).toISOString().slice(0,10);
+  }
+
+  if(v instanceof Date) return v.toISOString().slice(0,10);
+
+  const s=clean(v);
+  const parsed=new Date(s);
+  if(!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0,10);
+
+  const m=s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  if(m){
+    return `${m[3]}-${String(m[2]).padStart(2,"0")}-${String(m[1]).padStart(2,"0")}`;
+  }
+
+  return s;
+}
+
+function findHeaderRow(rows,required){
+  for(let i=0;i<Math.min(rows.length,20);i++){
+    const vals=rows[i].map(clean);
+    if(required.every(h=>vals.includes(h))) return i;
+  }
+  throw new Error("Could not find header row: "+required.join(", "));
+}
+
+function rowsToRecords(rows,requiredHeaders){
+  const h=findHeaderRow(rows,requiredHeaders);
+  const headers=rows[h].map(clean);
+  const out=[];
+
+  for(let r=h+1;r<rows.length;r++){
+    const rec={};
+    let any=false;
+
+    headers.forEach((name,c)=>{
+      if(name){
+        rec[name]=rows[r][c];
+        if(rows[r][c]!=null && clean(rows[r][c])!=="") any=true;
+      }
+    });
+
+    if(any) out.push(rec);
+  }
+
+  return out;
+}
+
+function first(rec,names,fallback=null){
+  for(const n of names){
+    if(Object.prototype.hasOwnProperty.call(rec,n) && rec[n]!=null && clean(rec[n])!==""){
+      return rec[n];
+    }
+  }
+  return fallback;
+}
+
+function buildModel(settingsRows,planRows,budgetRowsRaw){
+  const settingsRecords=rowsToRecords(settingsRows,["Parameter","Value"]);
+  const settings={};
+  settingsRecords.forEach(r=>settings[clean(r.Parameter)]=r.Value);
+
+  const planRecords=rowsToRecords(planRows,["Type","ID"]);
+  const budgetRecords=rowsToRecords(budgetRowsRaw,["WP","Year"]);
+
+  const items=planRecords.map(r=>{
+    const type=clean(first(r,["Type","ItemType","Item Type"],""));
+    const id=clean(first(r,["ID","Code","WP/MS"],""));
+
+    let wp=clean(first(r,["WorkPackage","WP","Work Package"],""));
+    if(!wp && type.toUpperCase()==="WP") wp=id;
+    if(!wp && id.toUpperCase().startsWith("M") && id.includes(".")){
+      wp="WP"+id.slice(1).split(".")[0];
+    }
+
+    let start=excelDate(first(r,["Start","Start Date","StartDate"]));
+    let end=excelDate(first(r,["End","End Date","EndDate"]));
+
+    if(["MS","MILESTONE"].includes(type.toUpperCase())){
+      if(!start) start=end;
+      if(!end) end=start;
+    }
+
+    return {
+      Type:type,
+      ID:id,
+      WP:wp,
+      Name:clean(first(r,["Title","Name","Description"],"")),
+      Goal:clean(first(r,["R&D Goal","R&D Goals","Goal"],"")),
+      Start:start,
+      End:end,
+      Owner:clean(first(r,["Owner","Partner","Responsible"],"")),
+      Status:clean(first(r,["Status"],"Planned")),
+      Progress:pct(first(r,["ProgressPct","Progress","Progress %","% Progress"],0)),
+      Budget:num(first(r,["PlannedBudget","Budget","Budget EUR","Planned Budget"],0)),
+      Actual:num(first(r,["ActualCost","Actual Cost","Actual","Actual EUR"],0))
+    };
+  });
+
+  const aliases={
+    "Personnel and indirect costs":["Personnel & indirect","Personnel & indirect costs","Personnel and indirect costs"],
+    "R&D services from subcontractors":["R&D subcontractors","R&D services from subcontractors"],
+    "Equipment":["Equipment"],
+    "Use of R&D facilities":["R&D facilities","Use of R&D facilities"],
+    "Other project costs":["Other project costs"],
+    "Procurement of R&D services":["Procurement of R&D services"]
+  };
+
+  const categories=Object.keys(aliases);
+
+  const budgetRows=budgetRecords.map(r=>{
+    const row={
+      WP:clean(first(r,["WP","WorkPackage","Work Package"],""))
+    };
+    row.Year=Number(first(r,["Year"],0))||null;
+
+    categories.forEach(cat=>{
+      row[cat]=num(first(r,aliases[cat],0));
+    });
+
+    const calc=categories.reduce((s,c)=>s+row[c],0);
+    const excelTotal=num(first(r,["Total"],0));
+    row.Total=excelTotal!==0?excelTotal:calc;
+
+    // Partner split:
+    // NTNU&SINTEF = Procurement of R&D services
+    // TQC = all remaining budget categories
+    row.NTNU&SINTEF = row["Procurement of R&D services"] || 0;
+    row.TQC = Math.max(0, row.Total - row.NTNU&SINTEF);
+
+    row.ActualCost=num(first(r,["ActualCost","Actual Cost","Actual"],0));
+    return row;
+  });
+
+  const wps=items.filter(x=>x.Type.toUpperCase()==="WP");
+  const tasks=items.filter(x=>["TASK","T"].includes(x.Type.toUpperCase()));
+  const milestones=items.filter(x=>["MS","MILESTONE"].includes(x.Type.toUpperCase()));
+
+  const budgetByWP={};
+  const budgetByYear={};
+  const budgetByCategory=Object.fromEntries(categories.map(c=>[c,0]));
+
+  const partnerByWP={};
+  const partnerByYear={};
+  let partnerTotalTQC=0;
+  let partnerTotalNTNU&SINTEF=0;
+
+  budgetRows.forEach(r=>{
+    const wp=r.WP||"Unassigned";
+    budgetByWP[wp]=(budgetByWP[wp]||0)+r.Total;
+
+    if(!partnerByWP[wp]) partnerByWP[wp]={TQC:0,NTNU&SINTEF:0,Total:0};
+    partnerByWP[wp].TQC += r.TQC || 0;
+    partnerByWP[wp].NTNU&SINTEF += r.NTNU&SINTEF || 0;
+    partnerByWP[wp].Total += r.Total || 0;
+
+    if(r.Year){
+      budgetByYear[r.Year]=(budgetByYear[r.Year]||0)+r.Total;
+      if(!partnerByYear[r.Year]) partnerByYear[r.Year]={TQC:0,NTNU&SINTEF:0,Total:0};
+      partnerByYear[r.Year].TQC += r.TQC || 0;
+      partnerByYear[r.Year].NTNU&SINTEF += r.NTNU&SINTEF || 0;
+      partnerByYear[r.Year].Total += r.Total || 0;
+    }
+
+    partnerTotalTQC += r.TQC || 0;
+    partnerTotalNTNU&SINTEF += r.NTNU&SINTEF || 0;
+
+    categories.forEach(c=>budgetByCategory[c]+=r[c]);
+  });
+
+  const budgetSheetTotal=budgetRows.reduce((s,r)=>s+r.Total,0);
+  const planBudgetTotal=wps.reduce((s,w)=>s+w.Budget,0);
+  const totalBudget=budgetSheetTotal>0?budgetSheetTotal:planBudgetTotal;
+
+  const actualFromBudget=budgetRows.reduce((s,r)=>s+r.ActualCost,0);
+  const actualFromPlan=wps.reduce((s,w)=>s+w.Actual,0);
+  const totalActual=actualFromBudget>0?actualFromBudget:actualFromPlan;
+
+  const wpWeight=w=>{
+    const b=num(budgetByWP[w.ID]);
+    return b>0?b:num(w.Budget);
+  };
+
+  const denom=wps.reduce((s,w)=>s+wpWeight(w),0);
+  let progress=0;
+
+  if(denom>0){
+    progress=wps.reduce((s,w)=>s+w.Progress*wpWeight(w),0)/denom;
+  }else if(wps.length){
+    progress=wps.reduce((s,w)=>s+w.Progress,0)/wps.length;
+  }
+
+  return {
+    settings:{
+      projectName:clean(settings.ProjectName||settings["Project Name"]||"Project"),
+      currency:clean(settings.Currency||"EUR"),
+      reportingDate:excelDate(settings.ReportingDate||settings["Reporting Date"])
+    },
+    items,wps,tasks,milestones,budgetRows,categories,budgetByWP,budgetByYear,budgetByCategory,
+    partnerByWP,partnerByYear,
+    partnerTotals:{TQC:partnerTotalTQC,NTNU&SINTEF:partnerTotalNTNU&SINTEF,Total:partnerTotalTQC+partnerTotalNTNU&SINTEF},
+    kpis:{
+      totalBudget,
+      totalActual,
+      remaining:totalBudget-totalActual,
+      progress,
+      milestoneTotal:milestones.length,
+      milestoneComplete:milestones.filter(m=>["complete","completed","done"].includes(m.Status.toLowerCase())).length,
+      milestoneDelayed:milestones.filter(m=>["delayed","late","overdue"].includes(m.Status.toLowerCase())).length
+    }
+  };
+}
+
+function money(v){
+  const cur=MODEL?.settings.currency||"EUR";
+  try{
+    return new Intl.NumberFormat("en-US",{style:"currency",currency:cur,maximumFractionDigits:0}).format(v||0);
+  }catch(e){
+    return `${Math.round(v||0).toLocaleString()} ${cur}`;
+  }
+}
+
+function renderAll(){
+  document.getElementById("projectTitle").textContent=MODEL.settings.projectName;
+  document.getElementById("projectMeta").textContent=
+    `Reporting date: ${MODEL.settings.reportingDate||"—"} • ${MODEL.wps.length} work packages`;
+
+  document.getElementById("kBudget").textContent=money(MODEL.kpis.totalBudget);
+  document.getElementById("kActual").textContent=money(MODEL.kpis.totalActual);
+  document.getElementById("kRemaining").textContent=money(MODEL.kpis.remaining);
+  document.getElementById("kProgress").textContent=`${MODEL.kpis.progress.toFixed(1)}%`;
+  document.getElementById("kMilestones").textContent=
+    `${MODEL.kpis.milestoneComplete} / ${MODEL.kpis.milestoneTotal}`;
+  document.getElementById("kDelayed").textContent=MODEL.kpis.milestoneDelayed;
+
+  populateFilters();
+  renderGantt();
+  renderBudget();
+  renderMilestones();
+}
+
+function populateFilters(){
+  const wp=document.getElementById("wpFilter");
+  const st=document.getElementById("statusFilter");
+
+  const oldWP=wp.value||"ALL";
+  const oldStatus=st.value||"ALL";
+
+  wp.innerHTML='<option value="ALL">All</option>';
+  st.innerHTML='<option value="ALL">All</option>';
+
+  const wpValues=[...new Set(MODEL.items.map(x=>clean(x.WP)).filter(Boolean))].sort();
+  const statusValues=[...new Set(MODEL.items.map(x=>clean(x.Status)).filter(Boolean))].sort();
+
+  wpValues.forEach(v=>{
+    const o=document.createElement("option");
+    o.value=v;o.textContent=v;wp.appendChild(o);
+  });
+
+  statusValues.forEach(v=>{
+    const o=document.createElement("option");
+    o.value=v;o.textContent=v;st.appendChild(o);
+  });
+
+  if(wpValues.includes(oldWP)) wp.value=oldWP;
+  if(statusValues.includes(oldStatus)) st.value=oldStatus;
+}
+
+function renderGantt(){
+  const wpFilter=document.getElementById("wpFilter").value;
+  const statusFilter=document.getElementById("statusFilter").value;
+
+  const filtered=MODEL.items.filter(x=>
+    (wpFilter==="ALL"||clean(x.WP)===wpFilter) &&
+    (statusFilter==="ALL"||clean(x.Status)===statusFilter)
+  );
+
+  const wps=filtered.filter(x=>x.Type.toUpperCase()==="WP"&&x.Start&&x.End);
+  const tasks=filtered.filter(x=>["TASK","T"].includes(x.Type.toUpperCase())&&x.Start&&x.End);
+  const ms=filtered.filter(x=>["MS","MILESTONE"].includes(x.Type.toUpperCase())&&(x.Start||x.End));
+
+  const traces=[];
+
+  if(wps.length){
+    traces.push({
+      type:"bar",
+      orientation:"h",
+      name:"Work packages",
+      y:wps.map(x=>`${x.ID} — ${x.Name}`),
+      x:wps.map(x=>new Date(x.End)-new Date(x.Start)),
+      base:wps.map(x=>x.Start),
+      customdata:wps.map(x=>[x.ID,x.Start,x.End,x.Owner,x.Status,x.Progress,x.Goal]),
+      hovertemplate:
+        "<b>%{customdata[0]}</b><br>%{y}<br>" +
+        "%{customdata[1]} → %{customdata[2]}<br>" +
+        "Owner: %{customdata[3]}<br>Status: %{customdata[4]}<br>" +
+        "Progress: %{customdata[5]:.1f}%<br>Goal: %{customdata[6]}<extra></extra>"
+    });
+  }
+
+  if(tasks.length){
+    traces.push({
+      type:"bar",
+      orientation:"h",
+      name:"Tasks",
+      y:tasks.map(x=>`   ${x.ID} — ${x.Name}`),
+      x:tasks.map(x=>new Date(x.End)-new Date(x.Start)),
+      base:tasks.map(x=>x.Start),
+      hovertemplate:"%{y}<extra></extra>"
+    });
+  }
+
+  if(ms.length){
+    traces.push({
+      type:"scatter",
+      mode:"markers+text",
+      name:"Milestones",
+      x:ms.map(x=>x.End||x.Start),
+      y:ms.map(x=>x.WP||x.ID),
+      text:ms.map(x=>x.ID),
+      textposition:"middle right",
+      marker:{symbol:"diamond",size:11},
+      customdata:ms.map(x=>[x.ID,x.Name,x.Owner,x.Status,x.WP]),
+      hovertemplate:
+        "<b>%{customdata[0]} — %{customdata[1]}</b><br>" +
+        "Date: %{x}<br>WP: %{customdata[4]}<br>" +
+        "Owner: %{customdata[2]}<br>Status: %{customdata[3]}<extra></extra>"
+    });
+  }
+
+  const shapes=[];
+  if(MODEL.settings.reportingDate){
+    shapes.push({
+      type:"line",
+      x0:MODEL.settings.reportingDate,
+      x1:MODEL.settings.reportingDate,
+      y0:0,y1:1,yref:"paper",
+      line:{width:2,dash:"dash"}
+    });
+  }
+
+  Plotly.react("gantt",traces,{
+    barmode:"overlay",
+    xaxis:{
+      type:"date",
+      dtick:"M3",
+      tickformat:"Q%q %y",
+      title:{text:"Quarter / Date",standoff:30}
+    },
+    yaxis:{autorange:"reversed",automargin:true},
+    margin:{l:190,r:25,t:30,b:85},
+    legend:{orientation:"h"},
+    shapes,
+    hovermode:"closest"
+  },{responsive:true,displaylogo:false});
+}
+
+function renderBudget(){
+  const wpNames=Object.keys(MODEL.budgetByWP);
+
+  const wpTQC=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].TQC:0);
+  const wpNTNU&SINTEF=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].NTNU&SINTEF:0);
+  const wpTotal=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].Total:0);
+
+  Plotly.newPlot("budgetWP",[
+    {
+      type:"bar",
+      name:"TQC",
+      x:wpNames,
+      y:wpTQC,
+      customdata:wpNames.map((w,i)=>[wpTQC[i],wpNTNU&SINTEF[i],wpTotal[i]]),
+      hovertemplate:
+        "<b>%{x}</b><br>" +
+        "TQC: %{customdata[0]:,.0f}<br>" +
+        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
+    },
+    {
+      type:"bar",
+      name:"NTNU&SINTEF",
+      x:wpNames,
+      y:wpNTNU&SINTEF,
+      customdata:wpNames.map((w,i)=>[wpTQC[i],wpNTNU&SINTEF[i],wpTotal[i]]),
+      hovertemplate:
+        "<b>%{x}</b><br>" +
+        "TQC: %{customdata[0]:,.0f}<br>" +
+        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
+    }
+  ],{
+    barmode:"group",
+    margin:{l:65,r:20,t:15,b:45},
+    yaxis:{title:MODEL.settings.currency},
+    legend:{orientation:"h"}
+  },{responsive:true,displaylogo:false});
+
+  Plotly.newPlot("budgetCat",[{
+    type:"pie",
+    labels:MODEL.categories,
+    values:MODEL.categories.map(c=>MODEL.budgetByCategory[c]),
+    hole:.42
+  }],{
+    margin:{l:10,r:10,t:10,b:10},
+    legend:{orientation:"h"}
+  },{responsive:true,displaylogo:false});
+
+  const years=Object.keys(MODEL.budgetByYear).sort();
+  const yearTQC=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].TQC:0);
+  const yearNTNU&SINTEF=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].NTNU&SINTEF:0);
+  const yearTotal=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].Total:0);
+
+  Plotly.newPlot("budgetYear",[
+    {
+      type:"bar",
+      name:"TQC",
+      x:years,
+      y:yearTQC,
+      customdata:years.map((y,i)=>[yearTQC[i],yearNTNU&SINTEF[i],yearTotal[i]]),
+      hovertemplate:
+        "<b>%{x}</b><br>" +
+        "TQC: %{customdata[0]:,.0f}<br>" +
+        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
+    },
+    {
+      type:"bar",
+      name:"NTNU&SINTEF",
+      x:years,
+      y:yearNTNU&SINTEF,
+      customdata:years.map((y,i)=>[yearTQC[i],yearNTNU&SINTEF[i],yearTotal[i]]),
+      hovertemplate:
+        "<b>%{x}</b><br>" +
+        "TQC: %{customdata[0]:,.0f}<br>" +
+        "NTNU&SINTEF: %{customdata[1]:,.0f}<br>" +
+        "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
+    }
+  ],{
+    barmode:"group",
+    margin:{l:65,r:20,t:15,b:45},
+    yaxis:{title:MODEL.settings.currency},
+    legend:{orientation:"h"}
+  },{responsive:true,displaylogo:false});
+
+  Plotly.newPlot("progressWP",[{
+    type:"bar",
+    orientation:"h",
+    y:MODEL.wps.map(w=>w.ID),
+    x:MODEL.wps.map(w=>w.Progress),
+    text:MODEL.wps.map(w=>`${w.Progress.toFixed(0)}%`),
+    textposition:"outside"
+  }],{
+    margin:{l:65,r:40,t:15,b:45},
+    xaxis:{range:[0,100],title:"Progress %"},
+    yaxis:{autorange:"reversed"}
+  },{responsive:true,displaylogo:false});
+}
+function renderMilestones(){
+  let s=
+    "<table><thead><tr>" +
+    "<th>ID</th><th>Milestone</th><th>WP</th><th>Date</th><th>Owner</th><th>Status</th>" +
+    "</tr></thead><tbody>";
+
+  MODEL.milestones.forEach(m=>{
+    s+=
+      `<tr>` +
+      `<td><b>${escapeHtml(m.ID)}</b></td>` +
+      `<td>${escapeHtml(m.Name)}</td>` +
+      `<td>${escapeHtml(m.WP)}</td>` +
+      `<td>${escapeHtml(m.End||m.Start||"")}</td>` +
+      `<td>${escapeHtml(m.Owner)}</td>` +
+      `<td><span class="pill">${escapeHtml(m.Status)}</span></td>` +
+      `</tr>`;
+  });
+
+  s+="</tbody></table>";
+  document.getElementById("milestoneTable").innerHTML=s;
+}
+
+function escapeHtml(v){
+  return clean(v).replace(/[&<>"']/g,c=>({
+    "&":"&amp;",
+    "<":"&lt;",
+    ">":"&gt;",
+    '"':"&quot;",
+    "'":"&#39;"
+  }[c]));
+}
+
+</script>
+</body>
+</html>
