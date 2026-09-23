@@ -50,7 +50,7 @@ th{background:#f8f9fb;position:sticky;top:0}
       <button id="refreshBtn">Refresh</button>
     </div>
 
-    <div id="statusBox" class="statusbox">Starting...</div><div class="muted" style="margin:0 0 10px 2px">Partner split: <b>SINTEF and NTNU = Procurement of R&amp;D services</b>; <b>TQC = all other budget categories</b>. Hover either bar to see TQC, SINTEF and NTNU and Total.</div>
+    <div id="statusBox" class="statusbox">Starting...</div><div class="muted" style="margin:0 0 10px 2px">Partner split: <b>NTNU and SINTEF = Procurement of R&amp;D services</b>; <b>TQC = all other budget categories</b>. Hover either bar to see TQC, NTNU and SINTEF, and Total.</div>
 
     <div class="cards">
       <div class="card"><div class="label">Total budget</div><div class="value" id="kBudget">—</div></div>
@@ -77,12 +77,12 @@ th{background:#f8f9fb;position:sticky;top:0}
     </div>
 
     <div class="grid2">
-      <div class="panel"><h2>Budget by work package — TQC vs SINTEF and NTNU</h2><div id="budgetWP" class="chart"></div></div>
+      <div class="panel"><h2>Budget by work package — TQC vs NTNU and SINTEF</h2><div id="budgetWP" class="chart"></div></div>
       <div class="panel"><h2>Budget by category</h2><div id="budgetCat" class="chart"></div></div>
     </div>
 
     <div class="grid2">
-      <div class="panel"><h2>Annual budget — TQC vs SINTEF and NTNU</h2><div id="budgetYear" class="chart"></div></div>
+      <div class="panel"><h2>Annual budget — TQC vs NTNU and SINTEF</h2><div id="budgetYear" class="chart"></div></div>
       <div class="panel"><h2>WP progress</h2><div id="progressWP" class="chart"></div></div>
     </div>
 
@@ -336,10 +336,10 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
     row.Total=excelTotal!==0?excelTotal:calc;
 
     // Partner split:
-    // SINTEF and NTNU = Procurement of R&D services
+    // NTNU and SINTEF = Procurement of R&D services
     // TQC = all remaining budget categories
-    row.SINTEFandNTNU = row["Procurement of R&D services"] || 0;
-    row.TQC = Math.max(0, row.Total - row.SINTEFandNTNU);
+    row.NTNUSINTEF = row["Procurement of R&D services"] || 0;
+    row.TQC = Math.max(0, row.Total - row.NTNUSINTEF);
 
     row.ActualCost=num(first(r,["ActualCost","Actual Cost","Actual"],0));
     return row;
@@ -356,27 +356,27 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
   const partnerByWP={};
   const partnerByYear={};
   let partnerTotalTQC=0;
-  let partnerTotalUiO=0;
+  let partnerTotalNTNUSINTEF=0;
 
   budgetRows.forEach(r=>{
     const wp=r.WP||"Unassigned";
     budgetByWP[wp]=(budgetByWP[wp]||0)+r.Total;
 
-    if(!partnerByWP[wp]) partnerByWP[wp]={TQC:0,UiO:0,Total:0};
+    if(!partnerByWP[wp]) partnerByWP[wp]={TQC:0,NTNUSINTEF:0,Total:0};
     partnerByWP[wp].TQC += r.TQC || 0;
-    partnerByWP[wp].UiO += r.UiO || 0;
+    partnerByWP[wp].NTNUSINTEF += r.NTNUSINTEF || 0;
     partnerByWP[wp].Total += r.Total || 0;
 
     if(r.Year){
       budgetByYear[r.Year]=(budgetByYear[r.Year]||0)+r.Total;
-      if(!partnerByYear[r.Year]) partnerByYear[r.Year]={TQC:0,UiO:0,Total:0};
+      if(!partnerByYear[r.Year]) partnerByYear[r.Year]={TQC:0,NTNUSINTEF:0,Total:0};
       partnerByYear[r.Year].TQC += r.TQC || 0;
-      partnerByYear[r.Year].UiO += r.UiO || 0;
+      partnerByYear[r.Year].NTNUSINTEF += r.NTNUSINTEF || 0;
       partnerByYear[r.Year].Total += r.Total || 0;
     }
 
     partnerTotalTQC += r.TQC || 0;
-    partnerTotalUiO += r.UiO || 0;
+    partnerTotalNTNUSINTEF += r.NTNUSINTEF || 0;
 
     categories.forEach(c=>budgetByCategory[c]+=r[c]);
   });
@@ -411,7 +411,7 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
     },
     items,wps,tasks,milestones,budgetRows,categories,budgetByWP,budgetByYear,budgetByCategory,
     partnerByWP,partnerByYear,
-    partnerTotals:{TQC:partnerTotalTQC,UiO:partnerTotalUiO,Total:partnerTotalTQC+partnerTotalUiO},
+    partnerTotals:{TQC:partnerTotalTQC,NTNUSINTEF:partnerTotalNTNUSINTEF,Total:partnerTotalTQC+partnerTotalNTNUSINTEF},
     kpis:{
       totalBudget,
       totalActual,
@@ -572,7 +572,7 @@ function renderBudget(){
   const wpNames=Object.keys(MODEL.budgetByWP);
 
   const wpTQC=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].TQC:0);
-  const wpUiO=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].UiO:0);
+  const wpNTNUSINTEF=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].NTNUSINTEF:0);
   const wpTotal=wpNames.map(w=>MODEL.partnerByWP[w]?MODEL.partnerByWP[w].Total:0);
 
   Plotly.newPlot("budgetWP",[
@@ -581,19 +581,19 @@ function renderBudget(){
       name:"TQC",
       x:wpNames,
       y:wpTQC,
-      customdata:wpNames.map((w,i)=>[wpTQC[i],wpUiO[i],wpTotal[i]]),
+      customdata:wpNames.map((w,i)=>[wpTQC[i],wpNTNUSINTEF[i],wpTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "UiO: %{customdata[1]:,.0f}<br>" +
+        "NTNU and SINTEF: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     },
     {
       type:"bar",
       name:"NTNU and SINTEF",
       x:wpNames,
-      y:wpUiO,
-      customdata:wpNames.map((w,i)=>[wpTQC[i],wpUiO[i],wpTotal[i]]),
+      y:wpNTNUSINTEF,
+      customdata:wpNames.map((w,i)=>[wpTQC[i],wpNTNUSINTEF[i],wpTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
@@ -619,7 +619,7 @@ function renderBudget(){
 
   const years=Object.keys(MODEL.budgetByYear).sort();
   const yearTQC=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].TQC:0);
-  const yearUiO=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].UiO:0);
+  const yearNTNUSINTEF=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].NTNUSINTEF:0);
   const yearTotal=years.map(y=>MODEL.partnerByYear[y]?MODEL.partnerByYear[y].Total:0);
 
   Plotly.newPlot("budgetYear",[
@@ -628,23 +628,23 @@ function renderBudget(){
       name:"TQC",
       x:years,
       y:yearTQC,
-      customdata:years.map((y,i)=>[yearTQC[i],yearUiO[i],yearTotal[i]]),
+      customdata:years.map((y,i)=>[yearTQC[i],yearNTNUSINTEF[i],yearTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "NTNU and SITEF: %{customdata[1]:,.0f}<br>" +
+        "NTNU and SINTEF: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     },
     {
       type:"bar",
-      name:"UiO",
+      name:"NTNU and SINTEF",
       x:years,
-      y:yearUiO,
-      customdata:years.map((y,i)=>[yearTQC[i],yearUiO[i],yearTotal[i]]),
+      y:yearNTNUSINTEF,
+      customdata:years.map((y,i)=>[yearTQC[i],yearNTNUSINTEF[i],yearTotal[i]]),
       hovertemplate:
         "<b>%{x}</b><br>" +
         "TQC: %{customdata[0]:,.0f}<br>" +
-        "UiO: %{customdata[1]:,.0f}<br>" +
+        "NTNU and SINTEF: %{customdata[1]:,.0f}<br>" +
         "<b>Total: %{customdata[2]:,.0f}</b><extra></extra>"
     }
   ],{
