@@ -338,8 +338,8 @@ function buildModel(settingsRows,planRows,budgetRowsRaw){
     // Partner split:
     // SINTEF and NTNU = Procurement of R&D services
     // TQC = all remaining budget categories
-    row.UiO = row["Procurement of R&D services"] || 0;
-    row.TQC = Math.max(0, row.Total - row.UiO);
+    row.SINTEFandNTNU = row["Procurement of R&D services"] || 0;
+    row.TQC = Math.max(0, row.Total - row.SINTEFandNTNU);
 
     row.ActualCost=num(first(r,["ActualCost","Actual Cost","Actual"],0));
     return row;
